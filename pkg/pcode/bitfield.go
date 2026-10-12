@@ -421,7 +421,8 @@ func (t *bitFieldInsertTransform) handleAndBack(state *bitFieldNodeState, op *Pc
 // leaving the masks in the output. other is the operand opposite the
 // constant c, inner the opcode it must be written by (with its own
 // constant). Not in Ghidra 12: an intentional extension of
-// BitFieldInsertTransform.
+// BitFieldInsertTransform. That Ghidra 12 keeps the masks here is read from
+// the ported handleAndBack/handleOrBack, not observed in a Ghidra run.
 func (t *bitFieldInsertTransform) maskedConstant(state *bitFieldNodeState, other *Varnode, c uint64, inner OpCode) (uint64, bool) {
 	if state.field == nil || !other.IsWritten() {
 		return 0, false
