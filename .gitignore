@@ -89,3 +89,6 @@ CLAUDE.md
 /Gosleigh.bat
 /Gosleigh-codex.bat
 __pycache__/
+
+# Internal working notes (status, journal, parity audit, C++ reading notes): local only
+/docs/

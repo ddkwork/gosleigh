@@ -15,7 +15,7 @@ import "math/bits"
 // so the next H7 step (consume-based deadcode + return preservation) can build on
 // a verified propagation core.
 //
-// Documented divergences from C++ (Gosleigh gaps, tracked in docs/STATUS.md H7):
+// Documented divergences from C++ (Gosleigh gaps):
 //   - Pre-live registers (coreaction.cc 3960): C++ marks every Varnode in a
 //     not-yet-heritaged deadcode space fully consumed. Gosleigh has no per-space
 //     heritage-pass tracking (no numHeritagePasses / deadRemovalAllowed), so this
