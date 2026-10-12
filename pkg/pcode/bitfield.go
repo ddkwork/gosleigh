@@ -345,7 +345,12 @@ func (t *bitFieldInsertTransform) isOriginalValue(state *bitFieldNodeState) bool
 // addConstantWrite records a constant written into the field.
 // C++ parity: BitFieldInsertTransform::addConstantWrite.
 func (t *bitFieldInsertTransform) addConstantWrite(state *bitFieldNodeState) bool {
-	value := state.node.Offset()
+	return t.addConstantValue(state, state.node.Offset())
+}
+
+// addConstantValue records value (the whole container's bits) as the
+// constant written into the field.
+func (t *bitFieldInsertTransform) addConstantValue(state *bitFieldNodeState, value uint64) bool {
 	state.node = nil
 	if state.field == nil || state.bitsField.ByteSize > 8 {
 		return false
@@ -400,7 +405,42 @@ func (t *bitFieldInsertTransform) handleAndBack(state *bitFieldNodeState, op *Pc
 	if res == 0 {
 		return t.addZeroOut(state)
 	}
-	return false // partial zeroing
+	// Partial zeroing: (orig | C2) & C1 still writes a constant when every
+	// field bit is cleared by C1 or set by C2.
+	if v, ok := t.maskedConstant(state, op.Input(0), cvn.Offset(), CPUI_INT_OR); ok {
+		return t.addConstantValue(state, v)
+	}
+	return false
+}
+
+// maskedConstant recognizes a constant stored into the field as a mask and
+// an or: compilers write field = k as (orig & ~clear) | set with clear only
+// the bits of k that are 0 *and* differ from what set provides -- mode = 5
+// in bits 1..3 becomes & 0xfffffffb | 0xa -- so neither operand covers the
+// field alone and Ghidra's trace (handleAndBack/handleOrBack) gives up,
+// leaving the masks in the output. other is the operand opposite the
+// constant c, inner the opcode it must be written by (with its own
+// constant). Not in Ghidra 12: an intentional extension of
+// BitFieldInsertTransform.
+func (t *bitFieldInsertTransform) maskedConstant(state *bitFieldNodeState, other *Varnode, c uint64, inner OpCode) (uint64, bool) {
+	if state.field == nil || !other.IsWritten() {
+		return 0, false
+	}
+	in := other.Def()
+	if in.Code() != inner || !in.Input(1).IsConstant() {
+		return 0, false
+	}
+	var and, or uint64
+	if inner == CPUI_INT_AND {
+		and, or = in.Input(1).Offset(), c // (orig & and) | or
+	} else {
+		and, or = c, in.Input(1).Offset() // (orig | or) & and
+	}
+	mask := state.bitsField.Mask()
+	if (^and|or)&mask != mask {
+		return 0, false // some field bit keeps the original value
+	}
+	return or & and, true
 }
 
 // handleOrBack follows the field through the one INT_OR input not masking
@@ -417,6 +457,11 @@ func (t *bitFieldInsertTransform) handleOrBack(state *bitFieldNodeState, op *Pco
 		if vn1.IsConstant() && vn1.NZMask()&mask == mask { // or-ing a constant setting every bit of the field
 			state.node = vn1
 			return true
+		}
+		if vn1.IsConstant() {
+			if v, ok := t.maskedConstant(state, vn0, vn1.Offset(), CPUI_INT_AND); ok {
+				return t.addConstantValue(state, v)
+			}
 		}
 		return false
 	}

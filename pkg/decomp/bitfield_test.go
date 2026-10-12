@@ -81,11 +81,28 @@ func TestDecompileBitfields(t *testing.T) {
 		0xc1, 0xe0, 0x18, // shl eax,24
 		0xc1, 0xf8, 0x1c, // sar eax,28
 		0xc3,
+		0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc, 0xcc,
+		// 0x140001030 set5_and_or(f): f->mode = 5 as compilers emit it -- only
+		// the bit that must become 0 is cleared, the or sets bits 1 and 3
+		0x8b, 0x01, // mov eax,[rcx]
+		0x83, 0xe0, 0xfb, // and eax,0xfffffffb
+		0x83, 0xc8, 0x0a, // or eax,0xa
+		0x89, 0x01, // mov [rcx],eax
+		0xc3,
+		0xcc, 0xcc, 0xcc, 0xcc, 0xcc,
+		// 0x140001040 set5_or_and(f): the same with the or first
+		0x8b, 0x01, // mov eax,[rcx]
+		0x83, 0xc8, 0x0a, // or eax,0xa
+		0x83, 0xe0, 0xfb, // and eax,0xfffffffb
+		0x89, 0x01, // mov [rcx],eax
+		0xc3,
 	}
 	host := flagsHost{
 		0x140001000: flagsPrototype("set_mode", true, voidT),
 		0x140001010: flagsPrototype("get_mode", false, intT),
 		0x140001020: flagsPrototype("get_level", false, intT),
+		0x140001030: flagsPrototype("set5_and_or", false, voidT),
+		0x140001040: flagsPrototype("set5_or_and", false, voidT),
 	}
 	prog := load(t, 64, code, 0x140001000)
 	for _, c := range []struct {
@@ -95,6 +112,9 @@ func TestDecompileBitfields(t *testing.T) {
 		{0x140001000, "f->mode = v;"},
 		{0x140001010, "f->mode"},
 		{0x140001020, "f->level"},
+		// Beyond Ghidra 12, which leaves these as masks (see maskedConstant).
+		{0x140001030, "f->mode = 5;"},
+		{0x140001040, "f->mode = 5;"},
 	} {
 		res, err := prog.Decompile(decomp.Function{Entry: c.entry, Host: host})
 		if err != nil {
